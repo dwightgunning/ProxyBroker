@@ -210,7 +210,10 @@ def add_grab_args(group):
 
 def add_serve_args(group):
     group.add_argument(
-        '--host', type=str, default='127.0.0.1', help='Host of local proxy server',
+        '--host',
+        type=str,
+        default='127.0.0.1',
+        help='Host of local proxy server',
     )
     group.add_argument(
         '--port', type=int, default=8888, help='Port of local proxy server'
@@ -431,7 +434,7 @@ def cli(args=sys.argv[1:]):
             strict=ns.strict,
             dnsbl=ns.dnsbl,
         )
-        print('Server started at http://%s:%d' % (ns.host, ns.port))
+        print('Server starting at http://%s:%d' % (ns.host, ns.port))
 
     try:
         if tasks:

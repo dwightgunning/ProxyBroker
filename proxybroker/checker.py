@@ -63,7 +63,7 @@ class Checker:
         )
 
         self._judges = [j for j in self._judges if j.is_working]
-        log.debug(
+        log.info(
             '%d judges added. Runtime: %.4f;' % (len(self._judges), time.time() - stime)
         )
 
@@ -102,9 +102,10 @@ class Checker:
                 UserWarning,
             )
         if self._judges:
-            log.debug('Loaded: %d proxy judges' % len(set(self._judges)))
+            log.info('Loaded: %d proxy judges' % len(set(self._judges)))
         else:
-            RuntimeError('Not found judges')
+            log.error('No judges found')
+        RuntimeError('Not found judges')
 
     def _types_passed(self, proxy):
         if not self._types:
@@ -271,16 +272,16 @@ async def _send_test_request(method, proxy, judge):
         raise err
     finally:
         proxy.log('Get: %s' % ('success' if content else 'failed'), err=err)
-        log.debug(
-            '{h}:{p} [{n}]: ({j}) rv: {rv}, response: {resp}'.format(
-                h=proxy.host,
-                p=proxy.port,
-                n=proxy.ngtr.name,
-                j=judge.url,
-                rv=rv,
-                resp=resp,
-            )
-        )
+        # log.debug(
+        #     '{h}:{p} [{n}]: ({j}) rv: {rv}, response: {resp}'.format(
+        #         h=proxy.host,
+        #         p=proxy.port,
+        #         n=proxy.ngtr.name,
+        #         j=judge.url,
+        #         rv=rv,
+        #         resp=resp,
+        #     )
+        # )
     return headers, content, rv
 
 
@@ -340,6 +341,7 @@ def _get_anonymity_lvl(real_ext_ip, proxy, judge, content):
 class ProxyChecker(Checker):
     def __init__(self, *args, **kwargs):
         warnings.warn(
-            '`ProxyChecker` is deprecated, use `Checker` instead.', DeprecationWarning,
+            '`ProxyChecker` is deprecated, use `Checker` instead.',
+            DeprecationWarning,
         )
         super().__init__(*args, **kwargs)

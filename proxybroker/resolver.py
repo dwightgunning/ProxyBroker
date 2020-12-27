@@ -91,7 +91,9 @@ class Resolver:
 
     async def get_real_ext_ip(self):
         """Return real external IP address."""
+        log.debug(f"Timeout for IP lookups: {self._timeout}")
         while self._ip_hosts:
+            log.debug(self._ip_hosts)
             try:
                 timeout = aiohttp.ClientTimeout(total=self._timeout)
                 async with aiohttp.ClientSession(

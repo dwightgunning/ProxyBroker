@@ -84,14 +84,25 @@ class ProxyPool:
         is_exceed_time = (proxy.error_rate > self._max_error_rate) or (
             proxy.avg_resp_time > self._max_resp_time
         )
+        log.info(
+            f"is_exceed_time = ({proxy.error_rate} > {self._max_error_rate}) or ({proxy.avg_resp_time} > {self._max_resp_time})"
+        )
+        log.info(
+            f"{proxy.stat['requests']} >= {self._min_req_proxy} and {is_exceed_time}"
+        )
+        log.info(f"newcomer: {proxy.stat['requests']} < {self._min_req_proxy}")
         if proxy.stat['requests'] < self._min_req_proxy:
+            log.warn('%s:%d going into the newcomers list' % (proxy.host, proxy.port))
             self._newcomers.append(proxy)
         elif proxy.stat['requests'] >= self._min_req_proxy and is_exceed_time:
-            log.debug('%s:%d removed from proxy pool' % (proxy.host, proxy.port))
+            log.warn('%s:%d removed from proxy pool' % (proxy.host, proxy.port))
         else:
+            log.warn('%s:%d going back into the proxy pool' % (proxy.host, proxy.port))
             heapq.heappush(self._pool, (proxy.priority, proxy))
 
-        log.debug('%s:%d stat: %s' % (proxy.host, proxy.port, proxy.stat))
+        log.warn(
+            "proxy host %s:%d , stat: %s" % (proxy.host, proxy.port, dict(proxy.stat))
+        )
 
     def remove(self, host, port):
         for proxy in self._newcomers:
@@ -179,11 +190,11 @@ class Server:
         def _on_completion(f):
             reader, writer = self._connections.pop(f)
             writer.close()
-            log.debug('client: %d; closed' % id(client_reader))
+            log.info('(on completion) client: %d; closed' % id(client_reader))
             try:
                 exc = f.exception()
             except asyncio.CancelledError:
-                log.debug('CancelledError in server._handle:_on_completion')
+                log.info('CancelledError in server._handle:_on_completion')
                 exc = None
             if exc:
                 if isinstance(exc, NoProxyError):
@@ -196,7 +207,7 @@ class Server:
         self._connections[f] = (client_reader, client_writer)
 
     async def _handle(self, client_reader, client_writer):
-        log.debug(
+        log.info(
             'Accepted connection from %s' % (client_writer.get_extra_info('peername'),)
         )
 
@@ -250,19 +261,29 @@ class Server:
                             await client_writer.drain()
                             return
 
+        log.debug("So it's not the proxybroker2 api...")
+        log.debug(f"Trying up to {self._max_tries} times")
+
         for attempt in range(self._max_tries):
+            log.debug(f"Attempt #{attempt}")
             stime, err = 0, None
+            log.debug(f"Getting a proxy from the pool....")
             proxy = await self._proxy_pool.get(scheme)
+            log.debug(f"Got a proxy from the pool....")
+
             proto = self._choice_proto(proxy, scheme)
-            log.debug(
-                'client: %d; attempt: %d; proxy: %s; proto: %s'
-                % (client, attempt, proxy, proto)
-            )
+            log.debug(f"Proto: {proto}")
+            # log.debug(
+            #     'client: %d; attempt: %d; proxy: %s; proto: %s'
+            #     % (client, attempt, proxy, proto)
+            # )
 
             try:
+                log.debug('Connecting to the proxy...')
                 await proxy.connect()
 
                 if proto in ('CONNECT:80', 'SOCKS4', 'SOCKS5'):
+                    log.debug(f"What ware we doing with {proto} proto?")
                     host = headers.get('Host')
                     port = headers.get('Port', 80)
                     try:
@@ -277,6 +298,7 @@ class Server:
                     else:  # HTTP
                         await proxy.send(request)
                 else:  # proto: HTTP & HTTPS
+                    log.debug('Sending request...')
                     await proxy.send(request)
 
                 history[
@@ -300,9 +322,11 @@ class Server:
                         )
                     ),
                 ]
+                log.info('Gathering...')
                 await asyncio.gather(*stream, loop=self._loop)
+                log.info('Gathered.')
             except asyncio.CancelledError:
-                log.debug('Cancelled in server._handle')
+                log.info('Cancelled in server._handle')
                 break
             except (
                 ProxyTimeoutError,
@@ -313,10 +337,10 @@ class Server:
                 BadStatusError,
                 BadResponseError,
             ) as e:
-                log.debug('client: %d; error: %r' % (client, e))
+                log.info('client: %d; error: %r' % (client, e))
                 continue
             except ErrorOnStream as e:
-                log.debug(
+                log.info(
                     'client: %d; error: %r; EOF: %s'
                     % (client, e, client_reader.at_eof())
                 )
@@ -327,16 +351,28 @@ class Server:
                     # Proxy may not be able to receive EOF and weel be raised a
                     # TimeoutError, but all the data has already successfully
                     # returned, so do not consider this error of proxy
+                    log.info(
+                        'breaking ...#  Proxy may not be able to receive EOF and weel be raised a'
+                    )
                     break
                 err = e
                 if scheme == 'HTTPS':  # SSL Handshake probably failed
+                    log.info('breaking ...# SSL Handshake probably failed')
                     break
             else:
+                log.info('client: %d; success!' % client)
                 break
             finally:
+                log.info('finalising!!!')
                 proxy.log(request.decode(), stime, err=err)
                 proxy.close()
+                log.info('Closed. Now putting the proxy back!!!')
                 self._proxy_pool.put(proxy)
+        else:
+            log.info(
+                'Max retries exceeded. client: %d; attempt: %d; proxy: %s; proto: %s'
+                % (client, attempt, proxy, proto)
+            )
 
     async def _parse_request(self, reader, length=65536):
         request = await reader.read(length)
@@ -353,6 +389,8 @@ class Server:
             return 'HTTP'
 
     def _choice_proto(self, proxy, scheme):
+        log.debug(f"choosing proto for scheme: {scheme}")
+        log.debug(f"Proxy types: {proxy.types}")
         if scheme == 'HTTP':
             if self._prefer_connect and ('CONNECT:80' in proxy.types):
                 proto = 'CONNECT:80'
@@ -363,10 +401,13 @@ class Server:
                     'SOCKS4',
                     'SOCKS5',
                 } & proxy.types.keys()
+                log.debug(f"relevant: {relevant}")
                 proto = relevant.pop()
         else:  # HTTPS
             relevant = {'HTTPS', 'SOCKS4', 'SOCKS5'} & proxy.types.keys()
+            log.debug(f"relevant: {relevant}")
             proto = relevant.pop()
+        log.debug(f"chose {proto}")
         return proto
 
     async def _stream(self, reader, writer, length=65536, scheme=None, inject=None):

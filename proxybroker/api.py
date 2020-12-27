@@ -43,7 +43,7 @@ class Broker:
         (optional) Flag indicating whether to check the SSL certificates.
         Set to True to check ssl certifications
     :param loop: (optional) asyncio compatible event loop
-    :param stop_broker_on_sigint: (optional) whether set SIGINT signal on broker object. 
+    :param stop_broker_on_sigint: (optional) whether set SIGINT signal on broker object.
         Useful for a thread other than main thread.
 
     .. deprecated:: 0.2.0
@@ -173,7 +173,10 @@ class Broker:
             Added: :attr:`post`, :attr:`strict`, :attr:`dnsbl`.
             Changed: :attr:`types` is required.
         """
+        log.debug('Getting started on the "find" operation...')
+        log.debug('First step.... resolve our external IP address...')
         ip = await self._resolver.get_real_ext_ip()
+        log.debug('Got IP address...')
         types = _update_types(types)
 
         if not types:
@@ -292,8 +295,9 @@ class Broker:
             loop=self._loop,
             **kwargs,
         )
+        log.debug('Startin server...')
         self._server.start()
-
+        log.debug('Adding "find" to the task list...')
         task = asyncio.ensure_future(self.find(limit=limit, **kwargs))
         self._all_tasks.append(task)
 
@@ -329,14 +333,14 @@ class Broker:
                 self._all_tasks.extend(tasks)
                 yield tasks
 
-        log.debug('Start grabbing proxies')
+        log.info('Starting proxy grab cycle')
         while True:
             for tasks in _get_tasks():
                 for task in asyncio.as_completed(tasks):
                     proxies = await task
                     for proxy in proxies:
                         await self._handle(proxy, check=check)
-            log.debug('Grab cycle is complete')
+            log.info('Grab cycle is complete')
             if self._server:
                 log.debug('fall asleep for %d seconds' % GRAB_PAUSE)
                 await asyncio.sleep(GRAB_PAUSE)

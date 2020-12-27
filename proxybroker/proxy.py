@@ -257,11 +257,12 @@ class Proxy:
     def log(self, msg, stime=0, err=None):
         ngtr = self.ngtr.name if self.ngtr else 'INFO'
         runtime = time.time() - stime if stime else 0
-        log.debug(
-            '{h}:{p} [{n}]: {msg}; Runtime: {rt:.2f}'.format(
-                h=self.host, p=self.port, n=ngtr, msg=msg, rt=runtime
+        if err:
+            log.debug(
+                '{h}:{p} [{n}]: {msg}; Runtime: {rt:.2f}'.format(
+                    h=self.host, p=self.port, n=ngtr, msg=msg, rt=runtime
+                )
             )
-        )
         trunc = '...' if len(msg) > 58 else ''
         msg = '{msg:.60s}{trunc}'.format(msg=msg, trunc=trunc)
         self._log.append((ngtr, msg, runtime))

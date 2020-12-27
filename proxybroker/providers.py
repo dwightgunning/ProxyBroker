@@ -79,6 +79,7 @@ class Provider:
         ) as self._session:
             await self._pipe()
 
+        log.info('%d proxies received from %s' % (len(self.proxies), self.domain))
         log.debug(
             '%d proxies received from %s: %s'
             % (len(self.proxies), self.domain, self.proxies)
@@ -114,9 +115,7 @@ class Provider:
             )
         self.proxies = received
         added = len(self.proxies) - oldcount
-        log.debug(
-            '%d(%d) proxies added(received) from %s' % (added, len(received), url)
-        )
+        log.info('%d(%d) proxies added(received) from %s' % (added, len(received), url))
 
     async def get(self, url, data=None, headers=None, method='GET'):
         for _ in range(self._max_tries):
@@ -720,7 +719,8 @@ PROVIDERS = [
         proto=('HTTP', 'CONNECT:80', 'HTTPS', 'CONNECT:25'),
     ),  # 200
     Provider(
-        url='http://cn-proxy.com/', proto=('HTTP', 'CONNECT:80', 'HTTPS', 'CONNECT:25'),
+        url='http://cn-proxy.com/',
+        proto=('HTTP', 'CONNECT:80', 'HTTPS', 'CONNECT:25'),
     ),  # 70
     Provider(
         url='https://hugeproxies.com/home/',
